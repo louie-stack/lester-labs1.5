@@ -1,0 +1,444 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi'
+import { parseUnits, isAddress } from 'viem'
+import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
+import { FeeDisplay } from '@/components/shared/FeeDisplay'
+import { TxStatusModal } from '@/components/shared/TxStatusModal'
+import { LockCertificate, type LockCertificateData } from './LockCertificate'
+import {
+  LIQUIDITY_LOCKER_ABI,
+  LIQUIDITY_LOCKER_ADDRESS,
+  ERC20_APPROVE_ABI,
+  LOCK_FEE,
+} from '@/lib/contracts/liquidityLocker'
+
+// ─── Duration helpers ──────────────────────────────────────────────────────
+
+type DurationOption = '1m' | '3m' | '6m' | '1y' | '2y' | 'custom'
+
+const DURATION_LABELS: Record<DurationOption, string> = {
+  '1m': '1 Month',
+  '3m': '3 Months',
+  '6m': '6 Months',
+  '1y': '1 Year',
+  '2y': '2 Years',
+  custom: 'Custom Date',
+}
+
+function addMonths(months: number): Date {
+  const d = new Date()
+  d.setMonth(d.getMonth() + months)
+  return d
+}
+
+function getUnlockDate(option: DurationOption, customDate: string): Date {
+  switch (option) {
+    case '1m': return addMonths(1)
+    case '3m': return addMonths(3)
+    case '6m': return addMonths(6)
+    case '1y': return addMonths(12)
+    case '2y': return addMonths(24)
+    case 'custom': return customDate ? new Date(customDate) : addMonths(1)
+  }
+}
+
+function tomorrowString(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
+}
+
+// ─── Step indicator ────────────────────────────────────────────────────────
+
+function ApproveStepIndicator({ approveStep }: { approveStep: 'approve' | 'lock' | 'done' }) {
+  const steps = [
+    { id: 'approve', label: 'Approve LP Token' },
+    { id: 'lock', label: 'Lock Tokens' },
+  ]
+
+  return (
+    <div className="flex items-center justify-center gap-0 mb-6">
+      {steps.map((s, idx) => {
+        const done = approveStep === 'done' || (approveStep === 'lock' && idx === 0)
+        const active = approveStep === s.id
+
+        return (
+          <div key={s.id} className="flex items-center">
+            <div className="flex flex-col items-center">
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
+                  done
+                    ? 'bg-green-500 text-white'
+                    : active
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'bg-white/10 text-white/40'
+                }`}
+              >
+                {done ? <CheckCircle2 size={16} /> : idx + 1}
+              </div>
+              <span
+                className={`mt-1.5 text-xs font-medium transition-colors ${
+                  active ? 'text-white' : done ? 'text-green-400' : 'text-white/30'
+                }`}
+              >
+                {s.label}
+              </span>
+            </div>
+            {idx < steps.length - 1 && (
+              <div
+                className={`mx-3 mb-5 h-px w-16 sm:w-24 transition-colors ${
+                  done ? 'bg-green-500' : 'bg-white/10'
+                }`}
+              />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Form field wrapper ────────────────────────────────────────────────────
+
+function Field({
+  label,
+  helper,
+  error,
+  children,
+}: {
+  label: string
+  helper?: string
+  error?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-white">{label}</label>
+      {children}
+      {error ? (
+        <p className="flex items-center gap-1 text-xs text-red-400">
+          <AlertCircle size={11} />
+          {error}
+        </p>
+      ) : helper ? (
+        <p className="text-xs text-[var(--text-muted)]">{helper}</p>
+      ) : null}
+    </div>
+  )
+}
+
+// ─── Main form ─────────────────────────────────────────────────────────────
+
+export function LockForm() {
+  const { address: connectedAddress } = useAccount()
+
+  // Form state
+  const [lpToken, setLpToken] = useState('')
+  const [amount, setAmount] = useState('')
+  const [duration, setDuration] = useState<DurationOption>('1y')
+  const [customDate, setCustomDate] = useState('')
+  const [withdrawer, setWithdrawer] = useState('')
+
+  // Populate withdrawer with wallet on connect
+  useEffect(() => {
+    if (connectedAddress && !withdrawer) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWithdrawer(connectedAddress)
+    }
+  }, [connectedAddress, withdrawer])
+
+  // Tx / flow state
+  const [approveStep, setApproveStep] = useState<'approve' | 'lock' | 'done'>('approve')
+  const [approveConfirmed, setApproveConfirmed] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [txStatus, setTxStatus] = useState<'pending' | 'success' | 'error'>('pending')
+  const [txMessage, setTxMessage] = useState<string | undefined>()
+  const [currentTxHash, setCurrentTxHash] = useState<`0x${string}` | undefined>()
+  const [successData, setSuccessData] = useState<LockCertificateData | null>(null)
+  const [inTwoStep, setInTwoStep] = useState(false) // show step indicator
+
+  const { writeContractAsync } = useWriteContract()
+
+  const { data: receipt } = useWaitForTransactionReceipt({ hash: currentTxHash })
+
+  // Handle receipt landing
+  useEffect(() => {
+    if (!receipt || !currentTxHash) return
+
+    if (approveStep === 'approve') {
+      // Approval confirmed
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setModalOpen(false)
+      setApproveConfirmed(true)
+      setApproveStep('lock')
+      setCurrentTxHash(undefined)
+    } else if (approveStep === 'lock') {
+      // Lock confirmed — extract lockId from logs (placeholder: use log index 0 topic)
+      const rawId = receipt.logs?.[0]?.topics?.[1]
+      const lockId = rawId ? BigInt(rawId).toString() : '1'
+      const unlockDate = getUnlockDate(duration, customDate)
+
+      setTxStatus('success')
+      setSuccessData({
+        lockId,
+        lpToken,
+        amount,
+        unlockDate,
+        withdrawer,
+      })
+    }
+  }, [receipt, currentTxHash, approveStep, duration, customDate, lpToken, amount, withdrawer])
+
+  // ── Validation ────────────────────────────────────────────────────────────
+
+  const lpTokenError =
+    lpToken && !isAddress(lpToken) ? 'Must be a valid 0x address' : undefined
+
+  const amountError =
+    amount && (isNaN(Number(amount)) || Number(amount) <= 0)
+      ? 'Must be a positive number'
+      : undefined
+
+  const withdrawerError =
+    withdrawer && !isAddress(withdrawer) ? 'Must be a valid 0x address' : undefined
+
+  const canSubmit =
+    isAddress(lpToken) &&
+    Number(amount) > 0 &&
+    !amountError &&
+    isAddress(withdrawer) &&
+    !withdrawerError
+
+  // ── Approve step ──────────────────────────────────────────────────────────
+
+  const handleApprove = async () => {
+    try {
+      setInTwoStep(true)
+      setApproveStep('approve')
+      setApproveConfirmed(false)
+      setModalOpen(true)
+      setTxStatus('pending')
+      setTxMessage(undefined)
+
+      const amountBigInt = parseUnits(amount, 18)
+
+      const hash = await writeContractAsync({
+        address: lpToken as `0x${string}`,
+        abi: ERC20_APPROVE_ABI,
+        functionName: 'approve',
+        args: [LIQUIDITY_LOCKER_ADDRESS, amountBigInt],
+      })
+
+      setCurrentTxHash(hash)
+    } catch (err: unknown) {
+      setTxStatus('error')
+      setTxMessage(errMessage(err))
+    }
+  }
+
+  // ── Lock step ─────────────────────────────────────────────────────────────
+
+  const handleLock = async () => {
+    try {
+      setApproveStep('lock')
+      setModalOpen(true)
+      setTxStatus('pending')
+      setTxMessage(undefined)
+
+      const amountBigInt = parseUnits(amount, 18)
+      const unlockDate = getUnlockDate(duration, customDate)
+      const unlockTimestamp = BigInt(Math.floor(unlockDate.getTime() / 1000))
+
+      const hash = await writeContractAsync({
+        address: LIQUIDITY_LOCKER_ADDRESS,
+        abi: LIQUIDITY_LOCKER_ABI,
+        functionName: 'lockLiquidity',
+        args: [
+          lpToken as `0x${string}`,
+          amountBigInt,
+          unlockTimestamp,
+          withdrawer as `0x${string}`,
+        ],
+        value: LOCK_FEE,
+      })
+
+      setCurrentTxHash(hash)
+    } catch (err: unknown) {
+      setTxStatus('error')
+      setTxMessage(errMessage(err))
+    }
+  }
+
+  const handleModalClose = () => {
+    setModalOpen(false)
+  }
+
+  const handleReset = () => {
+    setLpToken('')
+    setAmount('')
+    setDuration('1y')
+    setCustomDate('')
+    setWithdrawer(connectedAddress ?? '')
+    setApproveStep('approve')
+    setApproveConfirmed(false)
+    setInTwoStep(false)
+    setSuccessData(null)
+    setCurrentTxHash(undefined)
+  }
+
+  // ── Success ────────────────────────────────────────────────────────────────
+
+  if (successData && !modalOpen) {
+    return <LockCertificate data={successData} onReset={handleReset} />
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-6">
+      {/* Two-step indicator (only after first submit) */}
+      {inTwoStep && <ApproveStepIndicator approveStep={approveStep} />}
+
+      {/* Approval confirmed banner */}
+      {approveConfirmed && (
+        <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
+          <CheckCircle2 size={16} />
+          Approval confirmed — now lock your tokens
+        </div>
+      )}
+
+      <div className="rounded-xl border border-white/10 bg-[var(--surface-1)] p-6 sm:p-8 space-y-6">
+        {/* LP Token Address */}
+        <Field
+          label="LP Token Address"
+          helper="Paste your LP token contract address"
+          error={lpTokenError}
+        >
+          <input
+            type="text"
+            placeholder="0x…"
+            value={lpToken}
+            onChange={(e) => setLpToken(e.target.value)}
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 font-mono text-sm text-white placeholder-white/20 focus:border-[var(--accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+          />
+        </Field>
+
+        {/* Amount */}
+        <Field
+          label="Amount to Lock"
+          helper="How many LP tokens to lock"
+          error={amountError}
+        >
+          <div className="flex gap-2">
+            <input
+              type="number"
+              placeholder="0.00"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:border-[var(--accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+            />
+            <button
+              type="button"
+              title="Read balance (coming soon)"
+              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white/50 hover:border-white/20 hover:text-white/80 transition-colors"
+            >
+              Max
+            </button>
+          </div>
+        </Field>
+
+        {/* Lock Duration */}
+        <Field label="Lock Duration">
+          <select
+            value={duration}
+            onChange={(e) => setDuration(e.target.value as DurationOption)}
+            className="w-full rounded-lg border border-white/10 bg-[var(--surface-2)] px-4 py-2.5 text-sm text-white focus:border-[var(--accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+          >
+            {(Object.keys(DURATION_LABELS) as DurationOption[]).map((key) => (
+              <option key={key} value={key}>
+                {DURATION_LABELS[key]}
+              </option>
+            ))}
+          </select>
+
+          {duration === 'custom' && (
+            <input
+              type="date"
+              min={tomorrowString()}
+              value={customDate}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white focus:border-[var(--accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+            />
+          )}
+        </Field>
+
+        {/* Withdrawer Address */}
+        <Field
+          label="Withdrawer Address"
+          helper="Who can withdraw after lock expires — defaults to your wallet"
+          error={withdrawerError}
+        >
+          <input
+            type="text"
+            placeholder="0x…"
+            value={withdrawer}
+            onChange={(e) => setWithdrawer(e.target.value)}
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 font-mono text-sm text-white placeholder-white/20 focus:border-[var(--accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+          />
+        </Field>
+
+        {/* Fee display */}
+        <div className="rounded-lg border border-white/5 bg-white/5 px-4 py-3">
+          <FeeDisplay feeLTC={0.03} feeLabel="Lock fee" />
+        </div>
+
+        {/* CTA */}
+        {!approveConfirmed ? (
+          <button
+            onClick={handleApprove}
+            disabled={!canSubmit}
+            className="w-full rounded-lg bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            Step 1: Approve LP Token →
+          </button>
+        ) : (
+          <button
+            onClick={handleLock}
+            className="w-full rounded-lg bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-white hover:bg-[var(--accent-hover)] transition-colors flex items-center justify-center gap-2"
+          >
+            <Loader2 size={15} className="opacity-0 pointer-events-none" aria-hidden />
+            Step 2: Lock Tokens 🔒
+          </button>
+        )}
+      </div>
+
+      <TxStatusModal
+        isOpen={modalOpen}
+        onClose={handleModalClose}
+        status={txStatus}
+        txHash={currentTxHash}
+        message={txMessage}
+        onRetry={
+          txStatus === 'error'
+            ? approveStep === 'approve'
+              ? handleApprove
+              : handleLock
+            : undefined
+        }
+      />
+    </div>
+  )
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+
+function errMessage(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.message.includes('User rejected')) return 'Transaction was rejected.'
+    return err.message.slice(0, 120)
+  }
+  return 'An unexpected error occurred.'
+}

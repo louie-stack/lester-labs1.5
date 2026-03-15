@@ -1,0 +1,456 @@
+'use client'
+
+import { useState, useCallback } from 'react'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { waitForTransactionReceipt } from '@wagmi/core'
+import { isAddress, parseUnits, formatUnits } from 'viem'
+import { CheckCircle2, Download, ExternalLink, Loader2 } from 'lucide-react'
+import { ConnectWalletPrompt } from '@/components/shared/ConnectWalletPrompt'
+import { FeeDisplay } from '@/components/shared/FeeDisplay'
+import { TxStatusModal } from '@/components/shared/TxStatusModal'
+import { RecipientInput } from './RecipientInput'
+import { RecipientTable, type Recipient } from './RecipientTable'
+import {
+  DISPERSE_ABI,
+  ERC20_APPROVE_ABI,
+  DISPERSE_ADDRESS,
+  AIRDROP_FEE,
+} from '@/lib/contracts/airdrop'
+import { wagmiConfig } from '@/config/wagmi'
+
+const BATCH_SIZE = 200
+const EXPLORER_BASE = 'https://sepolia.arbiscan.io'
+
+type Mode = 'token' | 'native'
+
+interface BatchResult {
+  txHash: string
+  recipients: Recipient[]
+}
+
+interface SuccessState {
+  batches: BatchResult[]
+  totalRecipients: number
+  totalAmount: string
+  symbol: string
+}
+
+function downloadReport(success: SuccessState) {
+  const lines = ['address,amount,txHash']
+  for (const batch of success.batches) {
+    for (const r of batch.recipients) {
+      lines.push(`${r.address},${r.amount},${batch.txHash}`)
+    }
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'airdrop-report.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function SuccessPanel({ success, onReset }: { success: SuccessState; onReset: () => void }) {
+  return (
+    <div className="space-y-6 text-center">
+      <div className="text-5xl">🪂</div>
+      <div>
+        <h2 className="text-2xl font-bold text-white">Airdrop complete! ✓</h2>
+        <p className="mt-2 text-white/60">
+          Successfully reached{' '}
+          <span className="font-semibold text-white">{success.totalRecipients}</span> recipients
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-left space-y-3">
+        <div className="flex justify-between text-sm">
+          <span className="text-white/50">Total sent</span>
+          <span className="font-semibold text-white">
+            {success.totalAmount} {success.symbol}
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-white/50">Recipients</span>
+          <span className="font-semibold text-white">{success.totalRecipients}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-white/50">Batches</span>
+          <span className="font-semibold text-white">{success.batches.length}</span>
+        </div>
+      </div>
+
+      {/* Tx links */}
+      <div className="space-y-2">
+        {success.batches.map((batch, i) => (
+          <a
+            key={i}
+            href={`${EXPLORER_BASE}/tx/${batch.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 text-sm text-[var(--accent)] hover:underline"
+          >
+            {success.batches.length > 1 ? `Batch ${i + 1} transaction` : 'View transaction'}{' '}
+            <ExternalLink size={12} />
+          </a>
+        ))}
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => downloadReport(success)}
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+        >
+          <Download size={14} />
+          Download Report
+        </button>
+        <button
+          onClick={onReset}
+          className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--accent-hover)] transition-colors"
+        >
+          New Airdrop
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function AirdropForm() {
+  const { address, isConnected } = useAccount()
+
+  const [mode, setMode] = useState<Mode>('token')
+  const [tokenAddress, setTokenAddress] = useState('')
+  const [tokenDecimals] = useState(18) // Could be auto-fetched; hardcode for now
+  const [recipients, setRecipients] = useState<Recipient[]>([])
+
+  const [modalOpen, setModalOpen] = useState(false)
+  const [txStatus, setTxStatus] = useState<'pending' | 'success' | 'error'>('pending')
+  const [txMessage, setTxMessage] = useState<string | undefined>()
+  const [currentTxHash, setCurrentTxHash] = useState<`0x${string}` | undefined>()
+  const [successState, setSuccessState] = useState<SuccessState | null>(null)
+
+  const { writeContractAsync } = useWriteContract()
+  const { data: receipt } = useWaitForTransactionReceipt({ hash: currentTxHash })
+  void receipt // used as dependency for re-renders
+
+  const validRecipients = recipients.filter(
+    (r) => isAddress(r.address) && !isNaN(parseFloat(r.amount)) && parseFloat(r.amount) > 0,
+  )
+  const totalAmount = validRecipients.reduce((sum, r) => sum + parseFloat(r.amount), 0)
+  const batchCount = Math.ceil(validRecipients.length / BATCH_SIZE)
+  const totalFeeWei = AIRDROP_FEE * BigInt(batchCount)
+  const totalFeeLTC = parseFloat(formatUnits(totalFeeWei, 18))
+
+  const tokenAddressValid = mode === 'native' || isAddress(tokenAddress)
+
+  const canSubmit =
+    isConnected &&
+    validRecipients.length > 0 &&
+    tokenAddressValid &&
+    totalAmount > 0
+
+  const handleSend = useCallback(async () => {
+    if (!canSubmit) return
+
+    setModalOpen(true)
+    setTxStatus('pending')
+    setTxMessage(undefined)
+
+    const batches: Recipient[][] = []
+    for (let i = 0; i < validRecipients.length; i += BATCH_SIZE) {
+      batches.push(validRecipients.slice(i, i + BATCH_SIZE))
+    }
+
+    const batchResults: BatchResult[] = []
+
+    try {
+      if (mode === 'token') {
+        // Step 1: Approve — must be CONFIRMED before dispersing
+        setTxMessage('Step 1 of 2: Approving token spend…')
+        const totalAmountWei = parseUnits(totalAmount.toString(), tokenDecimals)
+
+        const approveHash = await writeContractAsync({
+          address: tokenAddress as `0x${string}`,
+          abi: ERC20_APPROVE_ABI,
+          functionName: 'approve',
+          args: [DISPERSE_ADDRESS, totalAmountWei],
+        })
+        setCurrentTxHash(approveHash)
+
+        // Wait for approval to be mined before dispersing
+        setTxMessage('Waiting for approval confirmation…')
+        await waitForTransactionReceipt(wagmiConfig, { hash: approveHash })
+        setTxMessage('Step 2 of 2: Sending airdrop…')
+
+        // Step 2: Disperse in batches
+        for (let b = 0; b < batches.length; b++) {
+          const batch = batches[b]
+          if (batches.length > 1) {
+            setTxMessage(`Sending batch ${b + 1} of ${batches.length}…`)
+          }
+
+          const addrs = batch.map((r) => r.address as `0x${string}`)
+          const vals = batch.map((r) => parseUnits(r.amount, tokenDecimals))
+
+          const hash = await writeContractAsync({
+            address: DISPERSE_ADDRESS,
+            abi: DISPERSE_ABI,
+            functionName: 'disperseToken',
+            args: [tokenAddress as `0x${string}`, addrs, vals],
+          })
+
+          batchResults.push({ txHash: hash, recipients: batch })
+          setCurrentTxHash(hash)
+        }
+      } else {
+        // zkLTC native — single or batched disperseEther
+        for (let b = 0; b < batches.length; b++) {
+          const batch = batches[b]
+          if (batches.length > 1) {
+            setTxMessage(`Sending batch ${b + 1} of ${batches.length}…`)
+          }
+
+          const addrs = batch.map((r) => r.address as `0x${string}`)
+          const vals = batch.map((r) => parseUnits(r.amount, 18))
+          const batchTotal = vals.reduce((a, v) => a + v, BigInt(0))
+
+          const hash = await writeContractAsync({
+            address: DISPERSE_ADDRESS,
+            abi: DISPERSE_ABI,
+            functionName: 'disperseEther',
+            args: [addrs, vals],
+            value: batchTotal + AIRDROP_FEE,
+          })
+
+          batchResults.push({ txHash: hash, recipients: batch })
+          setCurrentTxHash(hash)
+        }
+      }
+
+      setTxStatus('success')
+      setTxMessage(undefined)
+      setSuccessState({
+        batches: batchResults,
+        totalRecipients: validRecipients.length,
+        totalAmount: totalAmount.toString(),
+        symbol: mode === 'native' ? 'zkLTC' : 'tokens',
+      })
+    } catch (err: unknown) {
+      setTxStatus('error')
+      const msg =
+        err instanceof Error
+          ? err.message.includes('User rejected')
+            ? 'Transaction was rejected.'
+            : err.message.slice(0, 140)
+          : 'An unexpected error occurred.'
+      setTxMessage(msg)
+    }
+  }, [canSubmit, mode, tokenAddress, tokenDecimals, validRecipients, totalAmount, writeContractAsync])
+
+  const handleReset = () => {
+    setSuccessState(null)
+    setTokenAddress('')
+    setRecipients([])
+    setCurrentTxHash(undefined)
+    setModalOpen(false)
+  }
+
+  const handleModalClose = () => {
+    setModalOpen(false)
+    // Success state is shown inline
+  }
+
+  if (!isConnected) return <ConnectWalletPrompt />
+
+  if (successState && !modalOpen) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-[var(--surface-1)] p-6 sm:p-8">
+        <SuccessPanel success={successState} onReset={handleReset} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Mode Toggle */}
+      <div className="flex gap-2">
+        {(
+          [
+            { value: 'token' as Mode, label: '🪙 Token Airdrop', sub: 'ERC-20' },
+            { value: 'native' as Mode, label: '⚡ zkLTC Airdrop', sub: 'Native' },
+          ] as const
+        ).map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => {
+              setMode(opt.value)
+              setRecipients([])
+            }}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+              mode === opt.value
+                ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-white'
+                : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20 hover:text-white'
+            }`}
+          >
+            {opt.label}
+            <span className="text-[10px] font-normal opacity-60">{opt.sub}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Main card */}
+      <div className="rounded-xl border border-white/10 bg-[var(--surface-1)] p-6 sm:p-8 space-y-8">
+        {/* Step 1 — Token (only for ERC-20 mode) */}
+        {mode === 'token' && (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">
+                1
+              </span>
+              <h2 className="text-base font-semibold text-white">Select Token</h2>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm text-white/60">Token Contract Address</label>
+              <input
+                type="text"
+                value={tokenAddress}
+                onChange={(e) => setTokenAddress(e.target.value.trim())}
+                placeholder="0x..."
+                className={`w-full rounded-lg border px-3 py-2.5 font-mono text-sm text-white placeholder:text-white/20 focus:outline-none transition-colors ${
+                  tokenAddress && !isAddress(tokenAddress)
+                    ? 'border-red-500/50 bg-red-500/10 focus:border-red-500'
+                    : 'border-white/10 bg-white/5 focus:border-[var(--accent)]/50'
+                }`}
+              />
+              {tokenAddress && !isAddress(tokenAddress) && (
+                <p className="text-xs text-red-400">Invalid address format</p>
+              )}
+              {address && (
+                <p className="text-xs text-white/30">
+                  Connected wallet: <span className="font-mono">{address}</span>
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Step 2 — Recipients */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">
+              {mode === 'token' ? '2' : '1'}
+            </span>
+            <h2 className="text-base font-semibold text-white">Recipients</h2>
+          </div>
+
+          <RecipientInput onChange={setRecipients} />
+
+          {recipients.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-white/40 uppercase tracking-wider">
+                  Preview
+                </p>
+                <p className="text-xs text-white/40">
+                  {validRecipients.length} valid / {recipients.length} total
+                </p>
+              </div>
+              <RecipientTable
+                recipients={recipients}
+                tokenSymbol={mode === 'native' ? 'zkLTC' : 'tokens'}
+              />
+            </div>
+          )}
+        </section>
+
+        {/* Step 3 — Review & Send */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">
+              {mode === 'token' ? '3' : '2'}
+            </span>
+            <h2 className="text-base font-semibold text-white">Review & Send</h2>
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-white/50">Recipients</span>
+              <span className="font-medium text-white">{validRecipients.length}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-white/50">Total to send</span>
+              <span className="font-medium text-white">
+                {totalAmount > 0 ? totalAmount.toLocaleString() : '—'}{' '}
+                {mode === 'native' ? 'zkLTC' : 'tokens'}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-white/50">Batches</span>
+              <span className="font-medium text-white">
+                {batchCount > 0 ? batchCount : '—'}
+                {batchCount > 1 && (
+                  <span className="ml-1.5 text-xs text-yellow-400">
+                    (≤{BATCH_SIZE} recipients per batch)
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="border-t border-white/10 pt-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-white/50">Platform fee</span>
+                <FeeDisplay feeLTC={totalFeeLTC} feeLabel="Fee" />
+              </div>
+            </div>
+            {mode === 'token' && (
+              <div className="rounded-md bg-blue-500/10 border border-blue-500/20 px-3 py-2 text-xs text-blue-300">
+                Two-step flow: you&apos;ll first approve the token spend, then confirm the airdrop transaction.
+              </div>
+            )}
+          </div>
+
+          {batchCount > 1 && (
+            <div className="flex items-center gap-2 text-xs text-yellow-400">
+              <span>⚠</span>
+              Will send in {batchCount} batches ({batchCount} transactions total)
+            </div>
+          )}
+
+          <button
+            onClick={handleSend}
+            disabled={!canSubmit}
+            className="w-full rounded-lg bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {txStatus === 'pending' && modalOpen ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Sending…
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                {mode === 'token' ? 'Approve & Airdrop Tokens' : 'Send zkLTC Airdrop'}
+              </>
+            )}
+          </button>
+
+          {!tokenAddressValid && mode === 'token' && (
+            <p className="text-center text-xs text-red-400">Enter a valid token contract address to continue</p>
+          )}
+          {validRecipients.length === 0 && recipients.length > 0 && (
+            <p className="text-center text-xs text-red-400">No valid recipients found — check your input</p>
+          )}
+        </section>
+      </div>
+
+      <TxStatusModal
+        isOpen={modalOpen}
+        onClose={handleModalClose}
+        status={txStatus}
+        txHash={currentTxHash}
+        message={txMessage}
+        onRetry={txStatus === 'error' ? handleSend : undefined}
+      />
+    </div>
+  )
+}
