@@ -35,12 +35,25 @@ async function main() {
   const disperseAddress = await disperse.getAddress();
   console.log("Disperse deployed to:", disperseAddress);
 
+  // --- ILOFactory ---
+  const ILOFactory = await ethers.getContractFactory("ILOFactory");
+  const iloFactory = await ILOFactory.deploy(
+    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", // Uniswap V2 router (Arbitrum Sepolia proxy)
+    deployer.address, // treasury — replace with multisig in production
+    200,              // 2% platform fee
+    ethers.parseEther("0.03") // 0.03 ETH creation fee
+  );
+  await iloFactory.waitForDeployment();
+  const iloFactoryAddress = await iloFactory.getAddress();
+  console.log("ILOFactory deployed to:", iloFactoryAddress);
+
   // --- Write deployed-addresses.json ---
   const addresses = {
     TokenFactory: tokenFactoryAddress,
     LiquidityLocker: liquidityLockerAddress,
     VestingFactory: vestingFactoryAddress,
     Disperse: disperseAddress,
+    ILOFactory: iloFactoryAddress,
     network: (await ethers.provider.getNetwork()).name,
     chainId: Number((await ethers.provider.getNetwork()).chainId),
     deployedAt: new Date().toISOString(),
@@ -55,6 +68,7 @@ async function main() {
   console.log("  LiquidityLocker: ", liquidityLockerAddress);
   console.log("  VestingFactory:  ", vestingFactoryAddress);
   console.log("  Disperse:        ", disperseAddress);
+  console.log("  ILOFactory:      ", iloFactoryAddress);
   console.log("\nNext: copy these addresses into src/lib/contracts/ in the frontend.");
 }
 

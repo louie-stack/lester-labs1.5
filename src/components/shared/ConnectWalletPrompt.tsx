@@ -12,6 +12,18 @@ export function ConnectWalletPrompt() {
         <div className="flex justify-center">
           <ConnectButton />
         </div>
+        <p className="mt-4 text-center" style={{ fontSize: '12px', color: 'rgba(107,107,138,0.7)' }}>
+          Need testnet ETH? →{' '}
+          <a
+            href="https://www.alchemy.com/faucets/arbitrum-sepolia"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: '#4A9EFF' }}
+          >
+            Get Arbitrum Sepolia ETH
+          </a>{' '}
+          from the Alchemy faucet
+        </p>
       </div>
     </div>
   )

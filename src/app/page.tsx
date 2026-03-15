@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Coins, Lock, Clock, Send, Users } from 'lucide-react'
+import { Coins, Lock, Clock, Send, Users, Rocket } from 'lucide-react'
 import { Navbar } from '@/components/layout/Navbar'
 
 /* ─── Data ──────────────────────────────────────────────────────────── */
@@ -41,6 +41,13 @@ const utilities = [
     name: 'Governance',
     description: 'Create proposals and let your community vote. No gas required.',
     fee: 'Free',
+  },
+  {
+    href: '/launchpad',
+    icon: Rocket,
+    name: 'Launchpad',
+    description: 'Community presales with automatic SparkDex LP creation and locking. Self-service, permissionless.',
+    fee: '0.03 zkLTC + 2%',
   },
 ]
 
@@ -111,8 +118,8 @@ export default function HomePage() {
             className="relative mx-auto mt-6 max-w-2xl text-lg leading-relaxed"
             style={{ color: 'rgba(237,237,237,0.55)' }}
           >
-            Deploy tokens, lock liquidity, set vesting schedules, run airdrops, and govern your
-            community. All on LitVM.
+            The DeFi utility suite for LitVM — Token Factory, Locker, Vesting, Airdrop,
+            Governance &amp; Launchpad. Testnet live on Arbitrum Sepolia. Mainnet launches with LitVM.
           </p>
 
           {/* CTAs */}
@@ -157,7 +164,7 @@ export default function HomePage() {
             Everything your project needs
           </h2>
           <p className="mb-12 text-center text-sm" style={{ color: 'rgba(237,237,237,0.4)' }}>
-            Five utilities. One dashboard. Zero guesswork.
+            Six utilities. One dashboard. Zero guesswork.
           </p>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -189,13 +196,13 @@ export default function HomePage() {
                   <span
                     className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
                     style={{
-                      background: 'rgba(34,197,94,0.1)',
-                      color: '#22c55e',
-                      border: '1px solid rgba(34,197,94,0.25)',
+                      background: 'rgba(255,184,0,0.1)',
+                      color: '#FFB800',
+                      border: '1px solid rgba(255,184,0,0.25)',
                     }}
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                    Live
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#FFB800' }} />
+                    Testnet Preview
                   </span>
                 </div>
 
@@ -277,20 +284,30 @@ export default function HomePage() {
 
               {/* Right links */}
               <div className="flex items-center gap-6">
-                {[
-                  { label: 'Docs', href: '#' },
-                  { label: 'GitHub', href: '#' },
-                  { label: 'Twitter/X', href: '#' },
-                ].map(({ label, href }) => (
-                  <a
-                    key={label}
-                    href={href}
-                    className="text-xs transition-colors hover:opacity-80"
-                    style={{ color: 'rgba(237,237,237,0.4)' }}
-                  >
-                    {label}
-                  </a>
-                ))}
+                <a
+                  href="https://docs.litvm.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs transition-colors hover:opacity-80"
+                  style={{ color: 'rgba(237,237,237,0.4)' }}
+                >
+                  Docs
+                </a>
+                <span
+                  className="text-xs"
+                  style={{ color: 'rgba(107,107,138,0.5)' }}
+                >
+                  GitHub (soon)
+                </span>
+                <a
+                  href="https://twitter.com/LesterLabs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs transition-colors hover:opacity-80"
+                  style={{ color: 'rgba(237,237,237,0.4)' }}
+                >
+                  Twitter/X
+                </a>
               </div>
             </div>
 
