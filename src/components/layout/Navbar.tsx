@@ -11,6 +11,7 @@ const navLinks = [
   { href: '/airdrop', label: 'Airdrop' },
   { href: '/governance', label: 'Governance' },
   { href: '/launchpad', label: 'Launchpad' },
+  { href: '/docs', label: 'Docs' },
 ]
 
 export function Navbar() {
