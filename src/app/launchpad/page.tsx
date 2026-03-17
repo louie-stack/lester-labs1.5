@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Navbar } from '@/components/layout/Navbar'
+import { ToolHero } from '@/components/shared/ToolHero'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { ILO_FACTORY_ADDRESS } from '@/config/contracts'
@@ -275,69 +276,25 @@ function PresaleCard({ presale }: { presale: MockPresale }) {
 
 export default function LaunchpadPage() {
   const [tab, setTab] = useState<Tab>('browse')
-  const cardRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const card = cardRef.current
-    if (!card) return
-    const onMove = (e: MouseEvent) => {
-      const rect = card.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width
-      const y = (e.clientY - rect.top) / rect.height
-      card.style.animation = 'none'
-      card.style.transform = `perspective(600px) rotateX(${(y - 0.5) * -8}deg) rotateY(${(x - 0.5) * 8}deg) translateY(-4px)`
-    }
-    const onLeave = () => {
-      card.style.transform = ''
-      card.style.animation = 'cardFloat 6s ease-in-out infinite'
-    }
-    card.addEventListener('mousemove', onMove)
-    card.addEventListener('mouseleave', onLeave)
-    return () => { card.removeEventListener('mousemove', onMove); card.removeEventListener('mouseleave', onLeave) }
-  }, [])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0818', color: '#f0eef5' }}>
       <Navbar />
 
-      {/* HERO */}
-      <div className="tool-hero">
-        <div className="tool-hero-bg">
-          <div className="tool-hero-glow" style={{ background: `radial-gradient(ellipse,rgba(${COLOR_RGB},.06) 0%,transparent 70%)` }} />
-          <div className="tool-hero-glow-2" />
-          <div className="tool-hero-grid" />
-        </div>
-        <div className="tool-hero-inner">
-          <div style={{ maxWidth: 480 }}>
-            <div className="tool-badge fade-up d1" style={{ background: `rgba(${COLOR_RGB},.08)`, border: `1px solid rgba(${COLOR_RGB},.15)`, color: COLOR }}>
-              <div className="tool-badge-dot" style={{ background: COLOR }} />
-              Presale Platform
-            </div>
-            <h1 className="tool-hero-title fade-up d2">
-              <span className="white">Lester </span>
-              <span className="accent" style={{ backgroundImage: `linear-gradient(135deg,${COLOR},#E44FB5)` }}>Launch</span>
-            </h1>
-            <p className="tool-hero-desc fade-up d3">Community presales with automatic LP creation on LitVM&apos;s native dex. Self-service, permissionless, contract-enforced.</p>
-            <div className="tool-hero-stats fade-up d4">
-              {[['LP','Auto-created'],['DEX','LitVM Native'],['Access','Open'],['Fee','2%']].map(([l,v]) => (
-                <div key={l} style={{ display:'flex',flexDirection:'column',gap:2 }}>
-                  <div className="tool-stat-label">{l}</div>
-                  <div className="tool-stat-value">{v}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div ref={cardRef} className="tool-illus-card fade-up d3" style={{ borderColor: `rgba(${COLOR_RGB},.12)` }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/carousel/launchpad.png" alt="Lester Launch" />
-            <div className="tool-illus-glow" style={{ background: `radial-gradient(ellipse at 50% 100%,rgba(${COLOR_RGB},.2) 0%,transparent 60%)` }} />
-          </div>
-        </div>
-      </div>
-
-      <div style={{ padding: '0 clamp(16px,4vw,40px)' }}>
-        <div className="tool-section-divide" />
-      </div>
+      <ToolHero
+        category="Presale Platform"
+        title="Lester"
+        titleHighlight="Launch"
+        subtitle="Community presales with automatic LP creation on LitVM's native dex. Self-service, permissionless, contract-enforced."
+        color={COLOR}
+        image="/images/carousel/launchpad.png"
+        stats={[
+          { label: 'LP', value: 'Auto-created' },
+          { label: 'DEX', value: 'LitVM Native' },
+          { label: 'Access', value: 'Open' },
+          { label: 'Fee', value: '2%' },
+        ]}
+      />
 
       {/* WORKSPACE */}
       <div className="tool-workspace-wrap">

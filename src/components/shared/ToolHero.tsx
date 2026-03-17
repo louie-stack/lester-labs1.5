@@ -8,15 +8,15 @@ interface StatPill {
 }
 
 interface ToolHeroProps {
-  category: string        // e.g. "Token Creation"
-  title: string           // e.g. "Lester Minter"
-  titleHighlight?: string // second word/phrase to gradient — if omitted, full title gets color
+  category: string
+  title: string
+  titleHighlight?: string
   subtitle: string
   color: string           // hex e.g. "#6B4FFF"
   stats: StatPill[]
+  image?: string          // e.g. "/images/carousel/token-factory.png"
 }
 
-// Parse hex to rgb numbers
 function hexToRgb(hex: string): [number, number, number] {
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
@@ -24,85 +24,112 @@ function hexToRgb(hex: string): [number, number, number] {
   return [r, g, b]
 }
 
-export function ToolHero({ category, title, titleHighlight, subtitle, color, stats }: ToolHeroProps) {
+export function ToolHero({ category, title, titleHighlight, subtitle, color, stats, image }: ToolHeroProps) {
   const headerRef = useRef<HTMLDivElement>(null)
   const [r, g, b] = hexToRgb(color)
+  const bg = '#0a0818'
 
   useEffect(() => {
     const el = headerRef.current
     if (!el) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible')
-          }
-        })
-      },
-      { threshold: 0.1, rootMargin: '0px 0px -20px 0px' }
-    )
-
-    el.querySelectorAll('.reveal, .title-reveal, .sub-reveal, .reveal-scale').forEach((node) => {
-      observer.observe(node)
-    })
-
-    // Trigger immediately since hero is above fold
     setTimeout(() => {
       el.querySelectorAll('.reveal, .title-reveal, .sub-reveal, .reveal-scale').forEach((node) => {
         node.classList.add('visible')
       })
     }, 80)
-
-    return () => observer.disconnect()
   }, [])
 
-  const baseName = titleHighlight ? title.replace(titleHighlight, '').trim() : title
+  const baseName = titleHighlight ? title : ''
 
   return (
     <div
       ref={headerRef}
       style={{
         position: 'relative',
-        padding: 'clamp(120px,12vw,160px) clamp(16px,4vw,40px) clamp(64px,7vw,96px)',
         overflow: 'hidden',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
-        textAlign: 'center',
+        background: bg,
       }}
     >
-      {/* Ambient glow blob */}
+      {/* Illustration — fades in from the right */}
+      {image && (
+        <div style={{
+          position: 'absolute',
+          top: 0, right: 0, bottom: 0,
+          width: '52%',
+          zIndex: 0,
+          pointerEvents: 'none',
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={image}
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center 30%',
+              display: 'block',
+              opacity: 0.55,
+            }}
+          />
+          {/* Fade left edge into bg */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(to right, ${bg} 0%, rgba(10,8,24,0.7) 30%, rgba(10,8,24,0.2) 65%, transparent 100%)`,
+          }} />
+          {/* Fade bottom edge */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(to top, ${bg} 0%, transparent 40%)`,
+          }} />
+          {/* Fade top edge */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(to bottom, ${bg} 0%, transparent 25%)`,
+          }} />
+          {/* Accent color tint overlay */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: `radial-gradient(ellipse at 70% 50%, rgba(${r},${g},${b},0.08) 0%, transparent 70%)`,
+          }} />
+        </div>
+      )}
+
+      {/* Ambient glow behind text */}
       <div style={{
-        position: 'absolute', top: '-80px', left: '50%', transform: 'translateX(-50%)',
-        width: '700px', height: '500px',
-        background: `radial-gradient(ellipse, rgba(${r},${g},${b},0.14) 0%, rgba(${r},${g},${b},0.04) 45%, transparent 70%)`,
-        filter: 'blur(40px)',
+        position: 'absolute',
+        top: '-80px', left: '20%',
+        width: '600px', height: '500px',
+        background: `radial-gradient(ellipse, rgba(${r},${g},${b},0.1) 0%, rgba(${r},${g},${b},0.03) 50%, transparent 70%)`,
+        filter: 'blur(50px)',
         pointerEvents: 'none', zIndex: 0,
       }} />
 
       {/* Horizontal accent lines */}
       <div style={{
-        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        width: '90%', maxWidth: '900px', height: '1px', pointerEvents: 'none', zIndex: 1,
+        position: 'absolute', top: '50%', left: 0, right: 0,
+        height: '1px', pointerEvents: 'none', zIndex: 1,
       }}>
         <div style={{
-          position: 'absolute', top: 0, left: 0, height: '1px', width: '25%',
-          background: `linear-gradient(90deg, transparent, rgba(${r},${g},${b},0.3))`,
-        }} />
-        <div style={{
-          position: 'absolute', top: 0, right: 0, height: '1px', width: '25%',
-          background: `linear-gradient(270deg, transparent, rgba(${r},${g},${b},0.3))`,
+          position: 'absolute', top: 0, left: 'clamp(16px,4vw,40px)', width: '20%',
+          height: '1px',
+          background: `linear-gradient(90deg, transparent, rgba(${r},${g},${b},0.25))`,
         }} />
       </div>
 
       {/* Floating particles */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
         {[
-          { left: '12%', top: '28%', delay: '0s', dur: '3.5s', size: '3px' },
-          { left: '82%', top: '22%', delay: '0.8s', dur: '4.2s', size: '2px' },
-          { left: '22%', top: '72%', delay: '1.5s', dur: '3.8s', size: '3px' },
-          { left: '72%', top: '60%', delay: '2.2s', dur: '4.5s', size: '2px' },
-          { left: '50%', top: '14%', delay: '0.4s', dur: '3.2s', size: '4px' },
-          { left: '91%', top: '48%', delay: '1.8s', dur: '3.6s', size: '3px' },
+          { left: '8%',  top: '25%', delay: '0s',   dur: '3.5s', size: '3px' },
+          { left: '18%', top: '70%', delay: '1.5s',  dur: '3.8s', size: '2px' },
+          { left: '45%', top: '15%', delay: '0.4s',  dur: '3.2s', size: '4px' },
+          { left: '5%',  top: '50%', delay: '2.2s',  dur: '4.5s', size: '2px' },
+          { left: '30%', top: '80%', delay: '1.8s',  dur: '3.6s', size: '3px' },
         ].map((p, i) => (
           <span key={i} style={{
             position: 'absolute',
@@ -117,90 +144,106 @@ export function ToolHero({ category, title, titleHighlight, subtitle, color, sta
       </div>
 
       {/* Content */}
-      <div style={{ position: 'relative', zIndex: 2, maxWidth: '720px', margin: '0 auto' }}>
+      <div style={{
+        position: 'relative',
+        zIndex: 2,
+        maxWidth: '1100px',
+        margin: '0 auto',
+        padding: 'clamp(120px,11vw,150px) clamp(16px,4vw,40px) clamp(64px,7vw,90px)',
+      }}>
+        <div style={{ maxWidth: '560px' }}>
 
-        {/* Category chip */}
-        <div className="reveal" style={{
-          display: 'inline-flex', alignItems: 'center', gap: '8px',
-          padding: '5px 16px',
-          background: `rgba(${r},${g},${b},0.1)`,
-          border: `1px solid rgba(${r},${g},${b},0.28)`,
-          borderRadius: '20px',
-          fontSize: '11px', color: color,
-          fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-          marginBottom: '24px',
-        }}>
-          {category}
-        </div>
+          {/* Category chip */}
+          <div className="reveal" style={{
+            display: 'inline-flex', alignItems: 'center', gap: '7px',
+            padding: '5px 14px',
+            background: `rgba(${r},${g},${b},0.1)`,
+            border: `1px solid rgba(${r},${g},${b},0.25)`,
+            borderRadius: '20px',
+            fontSize: '11px', color: color,
+            fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const,
+            marginBottom: '22px',
+          }}>
+            <span style={{
+              width: '5px', height: '5px', borderRadius: '50%',
+              background: color,
+              boxShadow: `0 0 6px ${color}`,
+              animation: 'toolDotPulse 2s ease-in-out infinite',
+              flexShrink: 0,
+            }} />
+            {category}
+          </div>
 
-        {/* Title */}
-        <h1 className="title-reveal" style={{
-          fontSize: 'clamp(42px, 6vw, 72px)',
-          fontWeight: 800,
-          lineHeight: 1.05,
-          letterSpacing: '-0.025em',
-          marginBottom: '20px',
-          fontFamily: 'Sora, sans-serif',
-        }}>
-          {titleHighlight ? (
-            <>
-              <span className="word" style={{ color: '#F0EEF5' }}>{baseName}</span>
-              {' '}
+          {/* Title */}
+          <h1 className="title-reveal" style={{
+            fontSize: 'clamp(44px, 6vw, 70px)',
+            fontWeight: 800,
+            lineHeight: 1.05,
+            letterSpacing: '-0.025em',
+            marginBottom: '18px',
+            fontFamily: 'Sora, sans-serif',
+          }}>
+            {titleHighlight ? (
+              <>
+                <span className="word" style={{ color: '#F0EEF5' }}>{baseName} </span>
+                <span
+                  className="word highlight"
+                  style={{
+                    background: `linear-gradient(135deg, #fff 0%, ${color} 50%, rgba(${r},${g},${b},0.8) 100%)`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
+                  {titleHighlight}
+                </span>
+              </>
+            ) : (
               <span
                 className="word highlight"
                 style={{
-                  background: `linear-gradient(135deg, #fff 0%, ${color} 50%, rgba(${r},${g},${b},0.7) 100%)`,
+                  background: `linear-gradient(135deg, #fff 0%, #e8e4ff 30%, ${color} 65%, rgba(${r},${g},${b},0.8) 100%)`,
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
                 }}
               >
-                {titleHighlight}
+                {title}
               </span>
-            </>
-          ) : (
-            <span
-              className="word highlight"
-              style={{
-                background: `linear-gradient(135deg, #fff 0%, #e8e4ff 30%, ${color} 65%, rgba(${r},${g},${b},0.8) 100%)`,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              {title}
-            </span>
-          )}
-        </h1>
+            )}
+          </h1>
 
-        {/* Subtitle */}
-        <p className="sub-reveal" style={{
-          fontSize: '17px',
-          color: 'rgba(240,238,245,0.5)',
-          maxWidth: '500px',
-          margin: '0 auto 36px',
-          lineHeight: 1.7,
-        }}>
-          {subtitle}
-        </p>
+          {/* Subtitle */}
+          <p className="sub-reveal" style={{
+            fontSize: '16px',
+            color: 'rgba(240,238,245,0.5)',
+            maxWidth: '420px',
+            lineHeight: 1.7,
+            marginBottom: '32px',
+          }}>
+            {subtitle}
+          </p>
 
-        {/* Stat pills */}
-        <div className="reveal reveal-delay-1" style={{
-          display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap',
-        }}>
-          {stats.map(({ label, value }) => (
-            <div key={label} style={{
-              padding: '7px 16px',
-              background: `rgba(${r},${g},${b},0.06)`,
-              border: `1px solid rgba(${r},${g},${b},0.15)`,
-              borderRadius: '10px',
-              fontSize: '12px',
-              display: 'flex', gap: '10px', alignItems: 'center',
-            }}>
-              <span style={{ color: 'rgba(240,238,245,0.35)', fontWeight: 500 }}>{label}</span>
-              <span style={{ color: '#F0EEF5', fontWeight: 700 }}>{value}</span>
-            </div>
-          ))}
+          {/* Stat row */}
+          <div className="reveal reveal-delay-1" style={{
+            display: 'flex', gap: '28px', flexWrap: 'wrap',
+          }}>
+            {stats.map(({ label, value }) => (
+              <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span style={{
+                  fontSize: '10px', fontWeight: 600,
+                  letterSpacing: '0.08em', textTransform: 'uppercase' as const,
+                  color: 'rgba(240,238,245,0.28)',
+                }}>
+                  {label}
+                </span>
+                <span style={{ fontSize: '16px', fontWeight: 700, color: '#F0EEF5' }}>
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+
         </div>
       </div>
     </div>
