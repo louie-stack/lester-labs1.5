@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Navbar } from '@/components/layout/Navbar'
+import { ToolHero } from '@/components/shared/ToolHero'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { ILO_FACTORY_ADDRESS } from '@/config/contracts'
@@ -568,23 +569,18 @@ export default function LaunchpadPage() {
     >
       <Navbar />
 
-      {/* Hero */}
-      <div style={{ position: 'relative', padding: 'clamp(120px,12vw,160px) clamp(16px,4vw,40px) clamp(60px,6vw,80px)', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ position: 'absolute', top: '-80px', left: '50%', transform: 'translateX(-50%)', width: '700px', height: '500px', background: 'radial-gradient(ellipse, rgba(94,106,210,0.12) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: '700px', margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '5px 14px', background: 'rgba(94,106,210,0.1)', border: '1px solid rgba(94,106,210,0.25)', borderRadius: '20px', fontSize: '11px', color: '#5E6AD2', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '20px' }}>Presale Platform</div>
-          <h1 style={{ fontSize: 'clamp(40px,5vw,68px)', fontWeight: 800, color: '#F0EEF5', lineHeight: 1.05, marginBottom: '16px', letterSpacing: '-0.02em', fontFamily: 'Sora, sans-serif' }}>Lester Launch</h1>
-          <p style={{ fontSize: '17px', color: 'rgba(240,238,245,0.5)', maxWidth: '480px', margin: '0 auto 32px', lineHeight: 1.65 }}>Community presales with automatic LP creation and locking on SparkDex. Self-service, permissionless, contract-enforced.</p>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {([['LP','Auto-created'],['DEX','LitVM Native'],['Access','Open']] as [string,string][]).map(([k,v]) => (
-              <div key={k} style={{ padding: '6px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', fontSize: '12px', color: 'rgba(240,238,245,0.6)', display: 'flex', gap: '8px' }}>
-                <span style={{ color: 'rgba(240,238,245,0.35)' }}>{k}</span>
-                <span style={{ color: '#F0EEF5', fontWeight: 600 }}>{v}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ToolHero
+        category="Presale Platform"
+        title="Lester"
+        titleHighlight="Launch"
+        subtitle="Community presales with automatic LP creation on LitVM's native dex. Self-service, permissionless, contract-enforced."
+        color="#5E6AD2"
+        stats={[
+          { label: 'LP', value: 'Auto-created' },
+          { label: 'DEX', value: 'LitVM Native' },
+          { label: 'Access', value: 'Open' },
+        ]}
+      />
 
       <div
         style={{
