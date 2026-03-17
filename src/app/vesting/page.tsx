@@ -1,67 +1,65 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAccount } from 'wagmi'
-import { Clock } from 'lucide-react'
 import { Navbar } from '@/components/layout/Navbar'
 import { ConnectWalletPrompt } from '@/components/shared/ConnectWalletPrompt'
 import { VestingForm } from '@/components/vesting/VestingForm'
 import { MySchedules } from '@/components/vesting/MySchedules'
 
+const ACCENT = '#F5A623'
+const R = 245, G = 166, B = 35
+
 type Tab = 'create' | 'my'
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'create', label: 'Create Schedule' },
+  { id: 'my', label: 'My Schedules' },
+]
 
 export default function VestingPage() {
   const { isConnected } = useAccount()
   const [activeTab, setActiveTab] = useState<Tab>('create')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   return (
-    <div className="min-h-screen bg-background">
+    <div style={{ minHeight: '100vh', background: '#08060E', color: '#F0EEF5', fontFamily: 'Inter, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease' }}>
       <Navbar />
-      <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 pt-32 pb-20">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10">
-              <Clock size={20} className="text-white" />
-            </div>
-            <h1 className="text-3xl font-bold text-white">Lester Vester</h1>
-          </div>
-          <p className="text-white/50">
-            Create token vesting plans for teams, investors, and advisors.
-          </p>
-        </div>
 
+      {/* Hero */}
+      <div style={{ position: 'relative', padding: 'clamp(120px,12vw,160px) clamp(16px,4vw,40px) clamp(60px,6vw,80px)', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ position: 'absolute', top: '-80px', left: '50%', transform: 'translateX(-50%)', width: '700px', height: '500px', background: `radial-gradient(ellipse, rgba(${R},${G},${B},0.12) 0%, transparent 70%)`, pointerEvents: 'none', zIndex: 0 }} />
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: '700px', margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '5px 14px', background: `rgba(${R},${G},${B},0.1)`, border: `1px solid rgba(${R},${G},${B},0.25)`, borderRadius: '20px', fontSize: '11px', color: ACCENT, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '20px' }}>Token Distribution</div>
+          <h1 style={{ fontSize: 'clamp(40px,5vw,68px)', fontWeight: 800, color: '#F0EEF5', lineHeight: 1.05, marginBottom: '16px', letterSpacing: '-0.02em', fontFamily: 'Sora, sans-serif' }}>Lester Vester</h1>
+          <p style={{ fontSize: '17px', color: 'rgba(240,238,245,0.5)', maxWidth: '480px', margin: '0 auto 32px', lineHeight: 1.65 }}>Set vesting schedules for teams, investors, and advisors. Linear and cliff — auto-release, no manual claims.</p>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {([['Schedules','Linear + Cliff'],['Release','Automatic'],['Claims','Zero']] as [string,string][]).map(([k,v]) => (
+              <div key={k} style={{ padding: '6px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', fontSize: '12px', color: 'rgba(240,238,245,0.6)', display: 'flex', gap: '8px' }}>
+                <span style={{ color: 'rgba(240,238,245,0.35)' }}>{k}</span>
+                <span style={{ color: '#F0EEF5', fontWeight: 600 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ maxWidth: '680px', margin: '0 auto', padding: '48px clamp(16px,4vw,40px) 80px' }}>
         {!isConnected ? (
           <ConnectWalletPrompt />
         ) : (
-          <div>
+          <>
             {/* Tabs */}
-            <div className="mb-6 flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
-              {(
-                [
-                  { id: 'create', label: 'Create Schedule' },
-                  { id: 'my', label: 'My Schedules' },
-                ] as { id: Tab; label: string }[]
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'text-white/50 hover:text-white'
-                  }`}
-                >
-                  {tab.label}
-                </button>
+            <div style={{ display: 'flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', marginBottom: '32px' }}>
+              {TABS.map(tab => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ flex: 1, padding: '10px 20px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, transition: 'all 0.2s', background: activeTab === tab.id ? ACCENT : 'transparent', color: activeTab === tab.id ? '#fff' : 'rgba(240,238,245,0.45)' }}>{tab.label}</button>
               ))}
             </div>
-
-            {/* Tab content */}
             {activeTab === 'create' ? <VestingForm /> : <MySchedules />}
-          </div>
+          </>
         )}
-      </main>
+      </div>
     </div>
   )
 }

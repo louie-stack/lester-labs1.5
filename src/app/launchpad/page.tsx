@@ -564,61 +564,35 @@ export default function LaunchpadPage() {
   return (
     <div
       className="min-h-screen"
-      style={{ background: 'var(--background)', color: 'var(--foreground)' }}
+      style={{ background: '#08060E', color: '#F0EEF5', fontFamily: 'Inter, sans-serif' }}
     >
       <Navbar />
+
+      {/* Hero */}
+      <div style={{ position: 'relative', padding: 'clamp(120px,12vw,160px) clamp(16px,4vw,40px) clamp(60px,6vw,80px)', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ position: 'absolute', top: '-80px', left: '50%', transform: 'translateX(-50%)', width: '700px', height: '500px', background: 'radial-gradient(ellipse, rgba(94,106,210,0.12) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: '700px', margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '5px 14px', background: 'rgba(94,106,210,0.1)', border: '1px solid rgba(94,106,210,0.25)', borderRadius: '20px', fontSize: '11px', color: '#5E6AD2', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '20px' }}>Presale Platform</div>
+          <h1 style={{ fontSize: 'clamp(40px,5vw,68px)', fontWeight: 800, color: '#F0EEF5', lineHeight: 1.05, marginBottom: '16px', letterSpacing: '-0.02em', fontFamily: 'Sora, sans-serif' }}>Lester Launch</h1>
+          <p style={{ fontSize: '17px', color: 'rgba(240,238,245,0.5)', maxWidth: '480px', margin: '0 auto 32px', lineHeight: 1.65 }}>Community presales with automatic LP creation and locking on SparkDex. Self-service, permissionless, contract-enforced.</p>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {([['LP','Auto-created'],['DEX','LitVM Native'],['Access','Open']] as [string,string][]).map(([k,v]) => (
+              <div key={k} style={{ padding: '6px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', fontSize: '12px', color: 'rgba(240,238,245,0.6)', display: 'flex', gap: '8px' }}>
+                <span style={{ color: 'rgba(240,238,245,0.35)' }}>{k}</span>
+                <span style={{ color: '#F0EEF5', fontWeight: 600 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div
         style={{
-          maxWidth: '1100px',
+          maxWidth: '900px',
           margin: '0 auto',
-          padding: '80px 24px 60px',
+          padding: '48px clamp(16px,4vw,40px) 80px',
         }}
       >
-        {/* Hero */}
-        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 16px',
-              background: 'rgba(99,102,241,0.1)',
-              border: '1px solid rgba(99,102,241,0.3)',
-              borderRadius: '20px',
-              fontSize: '12px',
-              color: 'var(--accent)',
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: '20px',
-            }}
-          >
-            🚀 Testnet
-          </div>
-          <h1
-            style={{
-              fontSize: 'clamp(32px, 5vw, 52px)',
-              fontWeight: 800,
-              lineHeight: 1.1,
-              marginBottom: '16px',
-            }}
-          >
-            Lester Launch
-          </h1>
-          <p
-            style={{
-              fontSize: '18px',
-              color: 'rgba(255,255,255,0.5)',
-              maxWidth: '520px',
-              margin: '0 auto',
-              lineHeight: 1.6,
-            }}
-          >
-            Community presales with automatic LP creation and locking on
-            SparkDex. Self-service, permissionless, contract-enforced.
-          </p>
-        </div>
-
         {/* Stats bar */}
         <div
           style={{
@@ -641,7 +615,7 @@ export default function LaunchpadPage() {
             <div
               key={label}
               style={{
-                background: 'var(--surface-1)',
+                background: 'rgba(255,255,255,0.025)',
                 padding: '20px',
                 textAlign: 'center',
               }}
@@ -670,33 +644,22 @@ export default function LaunchpadPage() {
         </div>
 
         {/* Tabs */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '4px',
-            marginBottom: '32px',
-            background: 'var(--surface-1)',
-            padding: '4px',
-            borderRadius: '10px',
-            width: 'fit-content',
-          }}
-        >
+        <div style={{ display: 'flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', marginBottom: '32px' }}>
           {(['browse', 'create'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               style={{
-                padding: '8px 20px',
-                background:
-                  tab === t ? 'var(--accent)' : 'transparent',
+                flex: 1,
+                padding: '10px 20px',
+                background: tab === t ? '#5E6AD2' : 'transparent',
                 border: 'none',
-                borderRadius: '7px',
-                color: tab === t ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontSize: '14px',
+                borderRadius: '9px',
+                color: tab === t ? '#fff' : 'rgba(240,238,245,0.45)',
+                fontSize: '13px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                textTransform: 'capitalize',
-                transition: 'all 0.15s',
+                transition: 'all 0.2s',
               }}
             >
               {t === 'browse' ? '📡 Browse Presales' : '🚀 Create Presale'}

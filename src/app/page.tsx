@@ -89,7 +89,7 @@ export default function HomePage() {
         slide.style.setProperty('--card-color-25', `rgba(${r},${g},${b},.25)`)
         slide.style.setProperty('--card-color-15', `rgba(${r},${g},${b},.15)`)
         slide.innerHTML = `
-          <div class="c-card">
+          <div class="c-card" onclick="window.location.href='${t.href}'" style="cursor:pointer">
             <div class="c-card-body">
               <div>
                 <div class="c-card-label" style="color:${t.color}">${t.label}</div>
@@ -103,7 +103,7 @@ export default function HomePage() {
               </div>
               <div>
                 <div style="font-size:12px;color:rgba(240,238,245,.5);margin-bottom:16px;line-height:1.55">${t.desc}</div>
-                <div class="c-card-link" style="color:${t.color}">↗ Open ${t.name}</div>
+                <a href="${t.href}" class="c-card-link" style="color:${t.color};text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px">↗ Open ${t.name}</a>
               </div>
             </div>
             <div class="c-card-visual">
