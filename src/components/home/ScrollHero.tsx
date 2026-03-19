@@ -63,6 +63,7 @@ export default function ScrollHero() {
     }
     clockRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(clockRef.current)
+    document.body.classList.remove('video-playing')
   }, [])
 
   // ─── Liquid animation ────────────────────────────────────
