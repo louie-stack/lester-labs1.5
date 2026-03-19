@@ -661,3 +661,11 @@ footer.lester-footer{border-top:1px solid var(--border);padding:48px clamp(16px,
 .d1{animation-delay:.05s}.d2{animation-delay:.1s}.d3{animation-delay:.15s}.d4{animation-delay:.2s}.d5{animation-delay:.25s}
 @keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
 @keyframes particleDrift{0%,100%{opacity:0;transform:translateY(0)}30%{opacity:1}70%{opacity:.5}100%{opacity:0;transform:translateY(-20px)}}
+
+/* Hide nav + banner during intro video */
+body.video-playing nav,
+body.video-playing #ltc-banner {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.6s ease !important;
+}
