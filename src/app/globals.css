@@ -667,12 +667,9 @@ body.video-playing nav,
 body.video-playing #ltc-banner {
   opacity: 0 !important;
   pointer-events: none !important;
-  transition: opacity 0.6s ease !important;
+  transition: none !important;
 }
-/* Fade nav + banner back in smoothly */
-nav, #ltc-banner {
-  transition: opacity 0.6s ease;
-}
+
 /* Instant black cover on page load - prevents content flash before video */
 html::before {
   content: '';
