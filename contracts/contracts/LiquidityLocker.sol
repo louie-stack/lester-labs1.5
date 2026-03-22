@@ -37,6 +37,7 @@ contract LiquidityLocker is Ownable, ReentrancyGuard {
         require(msg.value >= lockFee, "Insufficient fee");
         require(unlockTime > block.timestamp, "Unlock time must be future");
         require(amount > 0, "Amount must be > 0");
+        require(withdrawer != address(0), "Invalid withdrawer"); // F-012
 
         IERC20(lpToken).safeTransferFrom(msg.sender, address(this), amount);
 

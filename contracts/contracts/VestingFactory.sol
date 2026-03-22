@@ -28,7 +28,15 @@ contract VestingFactory is Ownable {
         bool /*revocable*/ // stored for UI purposes; VestingWallet is not revocable by default
     ) external payable returns (uint256 vestingId) {
         require(msg.value >= vestingFee, "Insufficient fee");
+        // F-014: Input validation
+        require(token != address(0), "Invalid token address");
+        require(beneficiary != address(0), "Invalid beneficiary");
+        require(totalAmount > 0, "Amount must be > 0");
         require(vestingDuration > 0, "Duration must be > 0");
+        require(cliffDuration <= vestingDuration, "Cliff exceeds vesting");
+        // Safe uint64 casts
+        require(startTime + cliffDuration <= type(uint64).max, "Start+cliff overflow");
+        require(vestingDuration - cliffDuration <= type(uint64).max, "Duration overflow");
 
         VestingWallet wallet = new VestingWallet(
             beneficiary,

@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useState, useCallback, useEffect } from 'react'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
 import { waitForTransactionReceipt } from '@wagmi/core'
-import { isAddress, parseUnits, formatUnits } from 'viem'
+import { isAddress, parseUnits } from 'viem'
 import { CheckCircle2, Download, ExternalLink, Loader2 } from 'lucide-react'
 import { ConnectWalletPrompt } from '@/components/shared/ConnectWalletPrompt'
-import { FeeDisplay } from '@/components/shared/FeeDisplay'
 import { TxStatusModal } from '@/components/shared/TxStatusModal'
 import { RecipientInput } from './RecipientInput'
 import { RecipientTable, type Recipient } from './RecipientTable'
@@ -14,9 +13,20 @@ import {
   DISPERSE_ABI,
   ERC20_APPROVE_ABI,
   DISPERSE_ADDRESS,
-  AIRDROP_FEE,
 } from '@/lib/contracts/airdrop'
+import { isValidContractAddress } from '@/config/contracts'
 import { wagmiConfig } from '@/config/wagmi'
+
+// ABI for fetching token decimals
+const ERC20_DECIMALS_ABI = [
+  {
+    name: 'decimals',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
+  },
+] as const
 
 const BATCH_SIZE = 200
 const EXPLORER_BASE = 'https://sepolia.arbiscan.io'
@@ -120,7 +130,7 @@ export function AirdropForm() {
 
   const [mode, setMode] = useState<Mode>('token')
   const [tokenAddress, setTokenAddress] = useState('')
-  const [tokenDecimals] = useState(18) // Could be auto-fetched; hardcode for now
+  const [tokenDecimals, setTokenDecimals] = useState(18)
   const [recipients, setRecipients] = useState<Recipient[]>([])
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -133,18 +143,35 @@ export function AirdropForm() {
   const { data: receipt } = useWaitForTransactionReceipt({ hash: currentTxHash })
   void receipt // used as dependency for re-renders
 
+  // Fetch actual token decimals on-chain (F-009 fix)
+  const { data: fetchedDecimals } = useReadContract({
+    address: isAddress(tokenAddress) ? (tokenAddress as `0x${string}`) : undefined,
+    abi: ERC20_DECIMALS_ABI,
+    functionName: 'decimals',
+    query: {
+      enabled: mode === 'token' && isAddress(tokenAddress),
+    },
+  })
+
+  // Update tokenDecimals when fetched
+  useEffect(() => {
+    if (fetchedDecimals !== undefined) {
+      setTokenDecimals(fetchedDecimals)
+    }
+  }, [fetchedDecimals])
+
   const validRecipients = recipients.filter(
     (r) => isAddress(r.address) && !isNaN(parseFloat(r.amount)) && parseFloat(r.amount) > 0,
   )
   const totalAmount = validRecipients.reduce((sum, r) => sum + parseFloat(r.amount), 0)
   const batchCount = Math.ceil(validRecipients.length / BATCH_SIZE)
-  const totalFeeWei = AIRDROP_FEE * BigInt(batchCount)
-  const totalFeeLTC = parseFloat(formatUnits(totalFeeWei, 18))
 
   const tokenAddressValid = mode === 'native' || isAddress(tokenAddress)
+  const isContractConfigured = isValidContractAddress(DISPERSE_ADDRESS)
 
   const canSubmit =
     isConnected &&
+    isContractConfigured &&
     validRecipients.length > 0 &&
     tokenAddressValid &&
     totalAmount > 0
@@ -182,7 +209,7 @@ export function AirdropForm() {
         await waitForTransactionReceipt(wagmiConfig, { hash: approveHash })
         setTxMessage('Step 2 of 2: Sending airdrop…')
 
-        // Step 2: Disperse in batches
+        // Step 2: Disperse in batches — wait for each receipt before marking complete (F-007)
         for (let b = 0; b < batches.length; b++) {
           const batch = batches[b]
           if (batches.length > 1) {
@@ -199,11 +226,18 @@ export function AirdropForm() {
             args: [tokenAddress as `0x${string}`, addrs, vals],
           })
 
-          batchResults.push({ txHash: hash, recipients: batch })
           setCurrentTxHash(hash)
+          // Wait for batch receipt confirmation before proceeding
+          setTxMessage(`Confirming batch ${b + 1} of ${batches.length}…`)
+          const batchReceipt = await waitForTransactionReceipt(wagmiConfig, { hash })
+          if (batchReceipt.status !== 'success') {
+            throw new Error(`Batch ${b + 1} failed on-chain`)
+          }
+          batchResults.push({ txHash: hash, recipients: batch })
         }
       } else {
         // zkLTC native — single or batched disperseEther
+        // Note: Platform fee removed from UI (F-008) - fee not enforceable in Disperse contract
         for (let b = 0; b < batches.length; b++) {
           const batch = batches[b]
           if (batches.length > 1) {
@@ -219,14 +253,21 @@ export function AirdropForm() {
             abi: DISPERSE_ABI,
             functionName: 'disperseEther',
             args: [addrs, vals],
-            value: batchTotal + AIRDROP_FEE,
+            value: batchTotal, // Fee removed - not enforceable in contract (F-008)
           })
 
-          batchResults.push({ txHash: hash, recipients: batch })
           setCurrentTxHash(hash)
+          // Wait for batch receipt confirmation before proceeding
+          setTxMessage(`Confirming batch ${b + 1} of ${batches.length}…`)
+          const batchReceipt = await waitForTransactionReceipt(wagmiConfig, { hash })
+          if (batchReceipt.status !== 'success') {
+            throw new Error(`Batch ${b + 1} failed on-chain`)
+          }
+          batchResults.push({ txHash: hash, recipients: batch })
         }
       }
 
+      // Only set success after ALL batch receipts confirm (F-007)
       setTxStatus('success')
       setTxMessage(undefined)
       setSuccessState({
@@ -396,12 +437,8 @@ export function AirdropForm() {
                 )}
               </span>
             </div>
-            <div className="border-t border-white/10 pt-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">Platform fee</span>
-                <FeeDisplay feeLTC={totalFeeLTC} feeLabel="Fee" />
-              </div>
-            </div>
+            {/* Platform fee UI removed (F-008) - fee not enforceable in Disperse contract
+               TODO: Re-add when contract-level fee enforcement is implemented */}
             {mode === 'token' && (
               <div className="rounded-md bg-blue-500/10 border border-blue-500/20 px-3 py-2 text-xs text-blue-300">
                 Two-step flow: you&apos;ll first approve the token spend, then confirm the airdrop transaction.

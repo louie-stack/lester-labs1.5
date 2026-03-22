@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { parseUnits } from 'viem'
+import { parseUnits, decodeEventLog } from 'viem'
 import { CheckCircle2, Copy, ExternalLink, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { StepBasics, type TokenBasics } from './StepBasics'
@@ -14,6 +14,7 @@ import {
   TOKEN_FACTORY_ADDRESS,
   CREATION_FEE,
 } from '@/lib/contracts/tokenFactory'
+import { isValidContractAddress } from '@/config/contracts'
 
 const STEPS = [
   { id: 1, label: 'Token Basics' },
@@ -88,6 +89,8 @@ function isBasicsValid(basics: TokenBasics): boolean {
     Number(basics.totalSupply) <= 1_000_000_000_000
   )
 }
+
+const isContractConfigured = isValidContractAddress(TOKEN_FACTORY_ADDRESS)
 
 interface SuccessState {
   tokenAddress: string
@@ -212,14 +215,25 @@ export function TokenWizard() {
     [basics.name, basics.symbol],
   )
 
-  // Watch for receipt — parse logs for the deployed token address
+  // Watch for receipt — parse logs for the deployed token address using ABI-based decoding (F-010)
   useEffect(() => {
     if (receipt && currentTxHash && txStatus === 'pending') {
-      // In production: parse receipt.logs for the TokenCreated event to get the real address.
-      // Placeholder until ABI includes the event signature.
-      const deployedAddress =
-        (receipt.logs?.[0]?.address as `0x${string}` | undefined) ??
-        '0x0000000000000000000000000000000000000000'
+      let deployedAddress = '0x0000000000000000000000000000000000000000'
+      for (const log of receipt.logs || []) {
+        try {
+          const decoded = decodeEventLog({
+            abi: TOKEN_FACTORY_ABI,
+            data: log.data,
+            topics: log.topics,
+          })
+          if (decoded.eventName === 'TokenCreated' && 'tokenAddress' in decoded.args) {
+            deployedAddress = decoded.args.tokenAddress as string
+            break
+          }
+        } catch {
+          // Not a matching event, continue
+        }
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       handleReceipt(currentTxHash, deployedAddress)
     }
@@ -290,6 +304,13 @@ export function TokenWizard() {
           />
         )}
 
+        {/* Contract not configured warning */}
+        {!isContractConfigured && (
+          <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-400">
+            Token Factory contract not configured. Please set NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS.
+          </div>
+        )}
+
         {/* Navigation */}
         <div className="mt-8 flex items-center justify-between gap-3">
           <button
@@ -303,7 +324,7 @@ export function TokenWizard() {
           {step < 3 && (
             <button
               onClick={() => setStep((s) => s + 1)}
-              disabled={step === 1 && !isBasicsValid(basics)}
+              disabled={(step === 1 && !isBasicsValid(basics)) || (step === 2 && !isContractConfigured)}
               className="rounded-lg bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next →

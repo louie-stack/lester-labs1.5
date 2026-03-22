@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi'
-import { parseUnits, isAddress } from 'viem'
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useReadContract } from 'wagmi'
+import { parseUnits, isAddress, decodeEventLog } from 'viem'
 import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
 import { FeeDisplay } from '@/components/shared/FeeDisplay'
 import { TxStatusModal } from '@/components/shared/TxStatusModal'
@@ -13,6 +13,20 @@ import {
   ERC20_APPROVE_ABI,
   LOCK_FEE,
 } from '@/lib/contracts/liquidityLocker'
+import { isValidContractAddress } from '@/config/contracts'
+
+// ABI for fetching token decimals (F-009)
+const ERC20_DECIMALS_ABI = [
+  {
+    name: 'decimals',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
+  },
+] as const
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
 // ─── Duration helpers ──────────────────────────────────────────────────────
 
@@ -140,6 +154,7 @@ export function LockForm() {
   const [duration, setDuration] = useState<DurationOption>('1y')
   const [customDate, setCustomDate] = useState('')
   const [withdrawer, setWithdrawer] = useState('')
+  const [lpDecimals, setLpDecimals] = useState(18)
 
   // Populate withdrawer with wallet on connect
   useEffect(() => {
@@ -148,6 +163,23 @@ export function LockForm() {
       setWithdrawer(connectedAddress)
     }
   }, [connectedAddress, withdrawer])
+
+  // Fetch actual LP token decimals on-chain (F-009)
+  const { data: fetchedDecimals } = useReadContract({
+    address: isAddress(lpToken) ? (lpToken as `0x${string}`) : undefined,
+    abi: ERC20_DECIMALS_ABI,
+    functionName: 'decimals',
+    query: {
+      enabled: isAddress(lpToken),
+    },
+  })
+
+  // Update lpDecimals when fetched
+  useEffect(() => {
+    if (fetchedDecimals !== undefined) {
+      setLpDecimals(fetchedDecimals)
+    }
+  }, [fetchedDecimals])
 
   // Tx / flow state
   const [approveStep, setApproveStep] = useState<'approve' | 'lock' | 'done'>('approve')
@@ -175,9 +207,23 @@ export function LockForm() {
       setApproveStep('lock')
       setCurrentTxHash(undefined)
     } else if (approveStep === 'lock') {
-      // Lock confirmed — extract lockId from logs (placeholder: use log index 0 topic)
-      const rawId = receipt.logs?.[0]?.topics?.[1]
-      const lockId = rawId ? BigInt(rawId).toString() : '1'
+      // Lock confirmed — extract lockId from logs using ABI-based decoding (F-010)
+      let lockId = '1'
+      for (const log of receipt.logs || []) {
+        try {
+          const decoded = decodeEventLog({
+            abi: LIQUIDITY_LOCKER_ABI,
+            data: log.data,
+            topics: log.topics,
+          })
+          if (decoded.eventName === 'LockCreated' && 'lockId' in decoded.args) {
+            lockId = decoded.args.lockId.toString()
+            break
+          }
+        } catch {
+          // Not a matching event, continue
+        }
+      }
       const unlockDate = getUnlockDate(duration, customDate)
 
       setTxStatus('success')
@@ -201,14 +247,23 @@ export function LockForm() {
       ? 'Must be a positive number'
       : undefined
 
+  // Zero withdrawer validation (F-012)
   const withdrawerError =
-    withdrawer && !isAddress(withdrawer) ? 'Must be a valid 0x address' : undefined
+    withdrawer && !isAddress(withdrawer)
+      ? 'Must be a valid 0x address'
+      : withdrawer === ZERO_ADDRESS
+      ? 'Withdrawer cannot be zero address'
+      : undefined
+
+  const isContractConfigured = isValidContractAddress(LIQUIDITY_LOCKER_ADDRESS)
 
   const canSubmit =
+    isContractConfigured &&
     isAddress(lpToken) &&
     Number(amount) > 0 &&
     !amountError &&
     isAddress(withdrawer) &&
+    withdrawer !== ZERO_ADDRESS &&
     !withdrawerError
 
   // ── Approve step ──────────────────────────────────────────────────────────
@@ -222,7 +277,8 @@ export function LockForm() {
       setTxStatus('pending')
       setTxMessage(undefined)
 
-      const amountBigInt = parseUnits(amount, 18)
+      // Use fetched LP token decimals (F-009)
+      const amountBigInt = parseUnits(amount, lpDecimals)
 
       const hash = await writeContractAsync({
         address: lpToken as `0x${string}`,
@@ -247,7 +303,8 @@ export function LockForm() {
       setTxStatus('pending')
       setTxMessage(undefined)
 
-      const amountBigInt = parseUnits(amount, 18)
+      // Use fetched LP token decimals (F-009)
+      const amountBigInt = parseUnits(amount, lpDecimals)
       const unlockDate = getUnlockDate(duration, customDate)
       const unlockTimestamp = BigInt(Math.floor(unlockDate.getTime() / 1000))
 

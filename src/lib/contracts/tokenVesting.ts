@@ -10,9 +10,17 @@ export const VESTING_FACTORY_ABI = [
       { name: 'startTime', type: 'uint256' },
       { name: 'cliffDuration', type: 'uint256' },
       { name: 'vestingDuration', type: 'uint256' },
-      { name: 'revocable', type: 'bool' },
     ],
     outputs: [{ name: 'vestingId', type: 'uint256' }],
+  },
+  {
+    type: 'event',
+    name: 'VestingCreated',
+    inputs: [
+      { name: 'vestingId', type: 'uint256', indexed: true },
+      { name: 'vestingWallet', type: 'address', indexed: true },
+      { name: 'beneficiary', type: 'address', indexed: true },
+    ],
   },
 ] as const
 
@@ -29,8 +37,8 @@ export const ERC20_APPROVE_ABI = [
   },
 ] as const
 
-export const VESTING_FACTORY_ADDRESS =
-  '0x0000000000000000000000000000000000000000' as `0x${string}`
+// Re-export from centralized config
+export { VESTING_FACTORY_ADDRESS } from '@/config/contracts'
 
 // Flat fee: 0.03 zkLTC
 export const VESTING_FEE = BigInt('30000000000000000')
