@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ScrollHero from '@/components/home/ScrollHero'
 
@@ -62,6 +62,8 @@ const tools = [
 ]
 
 export default function HomePage() {
+  const [introComplete, setIntroComplete] = useState(false)
+
   useEffect(() => {
     // ─── Google Fonts ────────────────────────────────────
     const fontLink = document.createElement('link')
@@ -233,10 +235,18 @@ export default function HomePage() {
 
       <main>
         {/* HERO */}
-        <ScrollHero />
+        <ScrollHero onIntroComplete={() => setIntroComplete(true)} />
 
         {/* Everything below scrolls over the fixed hero */}
-        <div style={{ position: 'relative', zIndex: 2, background: 'var(--bg)' }}>
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 2,
+            background: 'var(--bg)',
+            opacity: introComplete ? 1 : 0,
+            transition: 'opacity 500ms ease',
+          }}
+        >
 
         {/* ── TOOL SHOWCASE CAROUSEL ─────────────────────── */}
         <section className="carousel-section">
