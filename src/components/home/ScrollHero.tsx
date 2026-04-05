@@ -6,7 +6,7 @@ const VIDEO_URL  = '/lester-hero.mp4'
 const POSTER_IMG = '/lester-hero-poster.png'
 const VIDEO_HOLD = 5000   // ms of video before reveal starts
 
-export default function ScrollHero() {
+export default function ScrollHero({ onIntroComplete }: { onIntroComplete?: () => void }) {
   const videoRef      = useRef<HTMLVideoElement>(null)
   const clockRef      = useRef<number>(0)
   const startRef      = useRef<number | null>(null)
@@ -181,8 +181,12 @@ export default function ScrollHero() {
     setTimeout(() => setTitleOn(true), 2100)
     setTimeout(() => setTagOn(true),   3200)
     setTimeout(() => setCtaOn(true),   3600)
-    setTimeout(() => { setSiOn(true); setDone(true) }, 4200)
-  }, [])
+    setTimeout(() => {
+      setSiOn(true)
+      setDone(true)
+      onIntroComplete?.()
+    }, 4200)
+  }, [onIntroComplete])
 
   // Trigger at VIDEO_HOLD
   useEffect(() => {
@@ -229,7 +233,14 @@ export default function ScrollHero() {
   return (
     <>
       {/* ── Fixed hero layer (sits behind scrolling content) ── */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 1 }}>
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: done ? 1 : 5000,
+          pointerEvents: done ? 'none' : 'auto',
+        }}
+      >
 
         {/* Background image */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
